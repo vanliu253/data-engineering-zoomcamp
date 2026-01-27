@@ -14,4 +14,6 @@ COPY pyproject.toml .python-version uv.lock ./
 # verify if dependencies in local are synced with environment
 RUN uv sync --locked
 
-COPY pipeline.py .
+COPY ingest_data.py .
+
+ENTRYPOINT ["python", "ingest_data.py"]
