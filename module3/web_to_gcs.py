@@ -88,7 +88,47 @@ def web_to_gcs(year, service):
         print(f"Local: {file_name}")
 
         # read it back into a parquet file
-        df = pd.read_csv(file_name, dtype=dtype, parse_dates=parse_dates, compression='gzip')
+        # Read without parse_dates so we can robustly handle numeric epoch timestamps
+        df = pd.read_csv(file_name, dtype=dtype, compression='gzip')
+
+        # Normalize datetime columns (handle string datetimes and numeric epoch values)
+        for col in parse_dates:
+            if col in df.columns:
+                series = df[col]
+                # try numeric conversion first (will coerce non-numeric to NaN)
+                numeric = pd.to_numeric(series, errors='coerce')
+                if numeric.notna().any():
+                    max_val = numeric.abs().max()
+                    # choose unit heuristically based on magnitude
+                    if max_val > 1e17:
+                        unit = 'ns'
+                    elif max_val > 1e14:
+                        unit = 'us'
+                    elif max_val > 1e11:
+                        unit = 'ms'
+                    elif max_val > 1e9:
+                        unit = 's'
+                    else:
+                        unit = None
+
+                    if unit:
+                        df[col] = pd.to_datetime(numeric, unit=unit, errors='coerce')
+                    else:
+                        df[col] = pd.to_datetime(series, errors='coerce')
+                    # convert to microsecond precision for better compatibility with external
+                    # systems (e.g. BigQuery) which may not preserve nanosecond logical types
+                    try:
+                        if pd.api.types.is_datetime64_any_dtype(df[col].dtype):
+                            df[col] = df[col].astype('datetime64[us]')
+                    except Exception:
+                        pass
+                else:
+                    df[col] = pd.to_datetime(series, errors='coerce')
+                    try:
+                        if pd.api.types.is_datetime64_any_dtype(df[col].dtype):
+                            df[col] = df[col].astype('datetime64[us]')
+                    except Exception:
+                        pass
         file_name = file_name.replace('.csv.gz', '.parquet')
         df.to_parquet(file_name, engine='pyarrow')
         print(f"Parquet: {file_name}")
@@ -98,7 +138,7 @@ def web_to_gcs(year, service):
         print(f"GCS: {service}/{file_name}")
 
 
-# web_to_gcs('2019', 'green')
-# web_to_gcs('2020', 'green')
-web_to_gcs('2019', 'yellow')
-web_to_gcs('2020', 'yellow')
+web_to_gcs('2019', 'green')
+web_to_gcs('2020', 'green')
+# web_to_gcs('2019', 'yellow')
+# web_to_gcs('2020', 'yellow')

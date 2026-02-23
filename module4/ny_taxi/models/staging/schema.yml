@@ -1,0 +1,12 @@
+version: 2
+
+sources:
+  - name: staging
+    database: dtc-de-484820
+    schema: ny_taxi
+
+    tables:
+      - name: yellow_tripdata_partitioned_clustered
+      - name: green_tripdata_partitioned_clustered
+
+ 
